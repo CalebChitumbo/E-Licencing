@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Uploads use short-lived signed URLs issued by the Django API. Direct
+// client access is denied; the Admin SDK bypasses these rules.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

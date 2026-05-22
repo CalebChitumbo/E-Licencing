@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "irms"
+version = "0.1.0"
+description = "RPA Integrated Regulatory Information Management System — backend API"
+requires-python = ">=3.11"
+dependencies = [
+    "Django==5.0.6",
+    "djangorestframework==3.15.1",
+    "django-cors-headers==4.3.1",
+    "django-environ==0.11.2",
+    "drf-spectacular==0.27.2",
+    "firebase-admin==6.5.0",
+    "google-cloud-firestore==2.16.0",
+    "google-cloud-storage==2.16.0",
+    "google-cloud-tasks==2.16.3",
+    "gunicorn==22.0.0",
+    "weasyprint==62.3",
+    "qrcode[pil]==7.4.2",
+    "sendgrid==6.11.0",
+    "africastalking==1.2.7",
+    "pyhanko==0.25.1",
+    "structlog==24.1.0",
+    "python-slugify==8.0.4",
+    "tenacity==8.2.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.2.2",
+    "pytest-django==4.8.0",
+    "pytest-cov==5.0.0",
+    "pytest-mock==3.14.0",
+    "mock-firestore==0.11.0",
+    "ruff==0.4.10",
+    "mypy==1.10.1",
+    "django-stubs[compatible-mypy]==5.0.2",
+    "djangorestframework-stubs[compatible-mypy]==3.15.0",
+    "types-requests==2.32.0.20240602",
+]
+
+[tool.setuptools.packages.find]
+include = ["irms*", "apps*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP", "DJ", "C90"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/migrations/*" = ["E501", "F401"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+strict_optional = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "irms.settings.dev"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "irms.settings.dev"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+addopts = "-ra -q --strict-markers"
+markers = [
+    "integration: requires Firestore emulator",
+]

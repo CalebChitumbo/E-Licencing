@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// All application writes go through the Django Admin SDK. Client-side reads
+// are restricted to the public licence-verification path; everything else
+// is denied. The Admin SDK bypasses these rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /licences/{licenceNumber} {
+      // Read of a single licence by ID is allowed for the public verify page.
+      // The document itself omits PII; reveal nothing beyond status fields.
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
