@@ -1,52 +1,68 @@
+import { ExternalLink, Receipt } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { StatusBadge } from "../../components/StatusBadge";
-import { Spinner } from "../../components/Spinner";
+import { StatusBadge } from "../../components/ui/Badge";
+import { Card, CardBody } from "../../components/ui/Card";
+import { EmptyState } from "../../components/ui/EmptyState";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { SkeletonCard } from "../../components/ui/Skeleton";
 import { useInvoices } from "../../lib/queries";
-import { fmtDate, fmtMoney } from "../../lib/utils";
+import { cn, fmtDate, fmtMoney } from "../../lib/utils";
 
 export function PaymentsPage() {
   const [params] = useSearchParams();
   const highlight = params.get("invoice");
   const invoices = useInvoices("mine");
+  const list = invoices.data?.results || [];
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl">Payments</h1>
-      <p className="text-slate-600 text-sm">
-        After submitting an application, an invoice is issued. Pay via mobile money or bank deposit
-        and upload your proof of payment. The Accounts team will verify it within 48 hours.
-      </p>
-      {invoices.isLoading && <Spinner />}
-      {!invoices.isLoading && (invoices.data?.results.length ?? 0) === 0 && (
-        <p className="text-sm text-slate-500">No invoices yet.</p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Payments"
+        description="After submission an invoice is issued. Pay via mobile money or bank deposit, then the Accounts team verifies within 48 hours."
+      />
+
+      {invoices.isLoading && (
+        <div className="space-y-3"><SkeletonCard /><SkeletonCard /></div>
       )}
-      <div className="space-y-2">
-        {invoices.data?.results.map((inv) => (
-          <div
-            key={inv.id}
-            className={"card card-body flex items-center justify-between " +
-              (inv.id === highlight ? "ring-2 ring-brand-500" : "")}
-          >
-            <div>
-              <div className="font-semibold">{fmtMoney(inv.total, inv.currency)}</div>
-              <div className="text-xs text-slate-500">
-                Invoice for application {inv.application_id} · Issued {fmtDate(inv.created_at)}
-              </div>
-              {inv.payment_ref && (
-                <div className="text-xs text-slate-500">
-                  Payment ref: {inv.payment_ref}
+
+      {!invoices.isLoading && list.length === 0 && (
+        <EmptyState
+          icon={Receipt}
+          title="No invoices yet"
+          description="When you submit an application, the prescribed fee is invoiced here."
+        />
+      )}
+
+      <div className="space-y-3">
+        {list.map((inv) => (
+          <Card key={inv.id} className={cn(inv.id === highlight && "ring-2 ring-brand-500 ring-offset-2")}>
+            <CardBody className="flex items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                  <Receipt className="h-5 w-5" />
+                </span>
+                <div>
+                  <div className="text-lg font-semibold text-slate-900">
+                    {fmtMoney(inv.total, inv.currency)}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Application {inv.application_id.slice(0, 8)}… · Issued {fmtDate(inv.created_at)}
+                  </div>
+                  {inv.payment_ref && (
+                    <div className="text-xs text-slate-500">Payment ref: {inv.payment_ref}</div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <StatusBadge status={inv.status} />
-              <Link to={`/app/applications/${inv.application_id}`}
-                    className="text-xs text-brand-500 hover:underline">
-                View application →
-              </Link>
-            </div>
-          </div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <StatusBadge status={inv.status} />
+                <Link to={`/app/applications/${inv.application_id}`}
+                      className="inline-flex items-center gap-1 text-xs text-brand-500 hover:underline">
+                  View application <ExternalLink className="h-3 w-3" />
+                </Link>
+              </div>
+            </CardBody>
+          </Card>
         ))}
       </div>
     </div>

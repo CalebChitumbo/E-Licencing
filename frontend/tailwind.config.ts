@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import animate from "tailwindcss-animate";
 
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -20,7 +21,10 @@ export default {
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
       },
+      boxShadow: {
+        soft: "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
+      },
     },
   },
-  plugins: [],
+  plugins: [animate],
 } satisfies Config;

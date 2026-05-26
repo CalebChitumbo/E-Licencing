@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { ArrowLeft, ArrowRight, ExternalLink, FileSignature, Save, Send } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { AuditTimeline } from "../../components/AuditTimeline";
-import { ErrorBox, Spinner } from "../../components/Spinner";
-import { StageBadge, StatusBadge } from "../../components/StatusBadge";
+import { Alert } from "../../components/ui/Alert";
+import { StageBadge, StatusBadge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
+import { Card, CardBody, CardHeader } from "../../components/ui/Card";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Skeleton, SkeletonText } from "../../components/ui/Skeleton";
+import { Stepper, type Step } from "../../components/ui/Stepper";
+import { toast } from "../../components/ui/Toaster";
 import { asApiError } from "../../lib/api";
 import {
   useApplication,
@@ -13,12 +20,27 @@ import {
 } from "../../lib/queries";
 import { fmtDate, fmtMoney } from "../../lib/utils";
 
-const WIZARD_STEPS = [
-  { step: 1, title: "Applicant & contact", fields: ["applicant_name", "contact_phone", "contact_email"] },
-  { step: 2, title: "Practice description", fields: ["practice_type", "workload_summary", "personnel_count"] },
-  { step: 3, title: "Source declaration", fields: ["source_summary", "shielding_summary"] },
-  { step: 4, title: "Safety & training", fields: ["training_records", "dosimetry_provider", "emergency_plan_summary"] },
-] as const;
+const WIZARD_STEPS: Array<Step & { fields: { key: string; label: string; type?: "text" | "textarea" | "number" }[] }> = [
+  { key: "s1", title: "Applicant", description: "Contact details", fields: [
+    { key: "applicant_name", label: "Applicant name" },
+    { key: "contact_phone",  label: "Contact phone" },
+    { key: "contact_email",  label: "Contact email" },
+  ]},
+  { key: "s2", title: "Practice", description: "Scope of work", fields: [
+    { key: "practice_type",     label: "Practice type" },
+    { key: "workload_summary",  label: "Annual workload (procedures / patients)", type: "textarea" },
+    { key: "personnel_count",   label: "Personnel count", type: "number" },
+  ]},
+  { key: "s3", title: "Sources",  description: "Equipment summary", fields: [
+    { key: "source_summary",    label: "Source / equipment summary", type: "textarea" },
+    { key: "shielding_summary", label: "Shielding summary", type: "textarea" },
+  ]},
+  { key: "s4", title: "Safety",   description: "Training & emergency", fields: [
+    { key: "training_records",        label: "Personnel training records" },
+    { key: "dosimetry_provider",      label: "Dosimetry provider" },
+    { key: "emergency_plan_summary",  label: "Emergency plan summary", type: "textarea" },
+  ]},
+];
 
 export function ApplicationDetailPage() {
   const { id } = useParams();
@@ -28,163 +50,193 @@ export function ApplicationDetailPage() {
   const submit = useSubmitApplication(id || "");
   const updateWizard = useUpdateWizard(id || "");
 
-  const [step, setStep] = useState(1);
-  const [stepData, setStepData] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
-
-  if (app.isLoading) return <Spinner />;
-  if (!app.data) return <ErrorBox>Application not found.</ErrorBox>;
+  const [stepIdx, setStepIdx] = useState(0);
+  const [pending, setPending] = useState<Record<string, string>>({});
 
   const a = app.data;
-  const editable = a.current_stage === "draft" || a.current_stage === "info_requested";
+  const editable = a?.current_stage === "draft" || a?.current_stage === "info_requested";
+  const currentStep = WIZARD_STEPS[stepIdx];
 
-  const saved = (a.wizard_data?.[`step_${step}`] as Record<string, string> | undefined) || {};
-  const currentStep = WIZARD_STEPS.find((s) => s.step === step)!;
+  const saved = useMemo(
+    () => (a?.wizard_data?.[`step_${stepIdx + 1}`] as Record<string, string> | undefined) || {},
+    [a, stepIdx],
+  );
 
-  async function onSaveStep() {
-    setError(null);
+  async function saveAndAdvance(direction: "next" | "stay" | "submit") {
     try {
-      await updateWizard.mutateAsync({ step, data: { ...saved, ...stepData } });
-      setStepData({});
+      if (Object.keys(pending).length) {
+        await updateWizard.mutateAsync({ step: stepIdx + 1, data: { ...saved, ...pending } });
+        setPending({});
+        if (direction === "stay") toast.success("Step saved.");
+      }
+      if (direction === "next" && stepIdx < WIZARD_STEPS.length - 1) {
+        setStepIdx(stepIdx + 1);
+      } else if (direction === "submit") {
+        const result = await submit.mutateAsync();
+        toast.success("Application submitted. Invoice generated.");
+        navigate(`/app/payments?invoice=${result.invoice_id}`);
+      }
     } catch (err) {
-      setError(asApiError(err).detail);
+      toast.error(asApiError(err).detail);
     }
   }
 
-  async function onSubmit() {
-    setError(null);
-    try {
-      const result = await submit.mutateAsync();
-      navigate(`/app/payments?invoice=${result.invoice_id}`);
-    } catch (err) {
-      setError(asApiError(err).detail);
-    }
+  if (app.isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <SkeletonText lines={5} />
+      </div>
+    );
   }
+  if (!a) return <Alert tone="error">Application not found.</Alert>;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-4">
-        <div className="card">
-          <div className="card-body flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm text-slate-500">{a.form_type} application</div>
-              <div className="text-xl font-semibold">
-                {a.facility_snapshot?.name || a.facility_id}
-              </div>
-              <div className="text-xs text-slate-500">
-                Created {fmtDate(a.created_at)} · Fee {fmtMoney(a.fee_amount)}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1 items-end">
-              <StatusBadge status={a.status} />
-              <StageBadge stage={a.current_stage} />
-            </div>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Applications", to: "/app/applications" },
+          { label: a.facility_snapshot?.name || a.facility_id },
+        ]}
+        title={a.facility_snapshot?.name || a.facility_id}
+        description={`${a.form_type} application · created ${fmtDate(a.created_at)} · fee ${fmtMoney(a.fee_amount)}`}
+        actions={
+          <>
+            <StatusBadge status={a.status} size="md" />
+            <StageBadge stage={a.current_stage} size="md" />
+          </>
+        }
+      />
 
-        {a.info_request?.reason && (
-          <ErrorBox>
-            <div className="font-semibold">Information requested</div>
-            <div className="text-sm">{a.info_request.reason}</div>
-          </ErrorBox>
-        )}
+      <Card>
+        <CardBody>
+          <Stepper
+            steps={WIZARD_STEPS}
+            current={stepIdx}
+            onJump={editable ? (i) => setStepIdx(i) : undefined}
+          />
+        </CardBody>
+      </Card>
 
-        {editable && (
-          <div className="card">
-            <div className="card-header flex items-center justify-between">
-              <span>Application wizard</span>
-              <div className="flex gap-1">
-                {WIZARD_STEPS.map((s) => (
-                  <button key={s.step}
-                          onClick={() => { setStep(s.step); setStepData({}); }}
-                          className={
-                            "rounded px-2 py-1 text-xs " +
-                            (step === s.step ? "bg-brand-500 text-white" : "bg-slate-100")
-                          }>
-                    {s.step}
-                  </button>
+      {a.info_request?.reason && (
+        <Alert tone="warning" title="Information requested">
+          {a.info_request.reason}
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          {editable ? (
+            <Card>
+              <CardHeader eyebrow={`Step ${stepIdx + 1} of ${WIZARD_STEPS.length}`}>
+                {currentStep.title}
+              </CardHeader>
+              <CardBody className="space-y-4">
+                {currentStep.fields.map((f) => (
+                  <div key={f.key}>
+                    <label className="label">{f.label}</label>
+                    {f.type === "textarea" ? (
+                      <textarea
+                        className="input min-h-[80px]"
+                        defaultValue={saved[f.key] || ""}
+                        onBlur={(e) => setPending((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                      />
+                    ) : (
+                      <input
+                        type={f.type === "number" ? "number" : "text"}
+                        className="input"
+                        defaultValue={saved[f.key] || ""}
+                        onBlur={(e) => setPending((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                      />
+                    )}
+                  </div>
                 ))}
-              </div>
-            </div>
-            <div className="card-body space-y-3">
-              <div className="font-medium">Step {step}: {currentStep.title}</div>
-              {error && <ErrorBox>{error}</ErrorBox>}
-              {currentStep.fields.map((f) => (
-                <div key={f}>
-                  <label className="label">{f.replace(/_/g, " ")}</label>
-                  <input className="input"
-                         defaultValue={(saved[f] as string) || ""}
-                         onBlur={(e) => setStepData((prev) => ({ ...prev, [f]: e.target.value }))} />
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                  <Button
+                    variant="ghost"
+                    disabled={stepIdx === 0}
+                    onClick={() => setStepIdx((i) => Math.max(0, i - 1))}
+                    icon={<ArrowLeft className="h-4 w-4" />}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={() => saveAndAdvance("stay")} icon={<Save className="h-4 w-4" />}
+                            loading={updateWizard.isPending}>
+                      Save step
+                    </Button>
+                    {stepIdx < WIZARD_STEPS.length - 1 ? (
+                      <Button onClick={() => saveAndAdvance("next")} iconRight={<ArrowRight className="h-4 w-4" />}>
+                        Next
+                      </Button>
+                    ) : (
+                      <Button variant="accent" onClick={() => saveAndAdvance("submit")}
+                              icon={<Send className="h-4 w-4" />} loading={submit.isPending}>
+                        Submit application
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              ))}
-              <div className="flex items-center justify-between pt-2">
-                <button className="btn-ghost" type="button"
-                        disabled={step === 1}
-                        onClick={() => setStep((s) => Math.max(1, s - 1))}>
-                  ← Previous
-                </button>
-                <button className="btn-outline" onClick={onSaveStep} disabled={updateWizard.isPending}>
-                  Save step
-                </button>
-                {step < WIZARD_STEPS.length ? (
-                  <button className="btn-primary" type="button"
-                          onClick={() => setStep((s) => s + 1)}>
-                    Next →
-                  </button>
-                ) : (
-                  <button className="btn-accent" type="button"
-                          onClick={onSubmit} disabled={submit.isPending}>
-                    {submit.isPending ? "Submitting…" : "Submit application"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!editable && (
-          <div className="card">
-            <div className="card-header">Submitted wizard data</div>
-            <div className="card-body grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              {Object.entries(a.wizard_data || {}).map(([stepKey, payload]) => (
-                <div key={stepKey} className="rounded border border-slate-100 p-3">
-                  <div className="font-medium mb-2">{stepKey}</div>
-                  {Object.entries(payload as Record<string, string>).map(([k, v]) => (
-                    <div key={k} className="text-xs">
-                      <span className="text-slate-500">{k}:</span> {String(v)}
+              </CardBody>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>Submitted wizard data</CardHeader>
+              <CardBody>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {Object.entries(a.wizard_data || {}).map(([stepKey, payload]) => (
+                    <div key={stepKey} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        {stepKey.replace("_", " ")}
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        {Object.entries(payload as Record<string, string>).map(([k, v]) => (
+                          <div key={k}>
+                            <span className="text-xs text-slate-500">{k.replace(/_/g, " ")}: </span>
+                            <span>{String(v) || "—"}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </CardBody>
+            </Card>
+          )}
 
-        {a.licence_id && (
-          <div className="card">
-            <div className="card-body">
-              <div className="text-sm text-slate-500">Licence issued</div>
-              <div className="text-xl font-semibold">{a.licence_id}</div>
-              <a
-                href={`${import.meta.env.VITE_PUBLIC_VERIFY_URL || "/verify"}/${a.licence_id}`}
-                className="text-sm text-brand-500 hover:underline"
-                target="_blank" rel="noreferrer"
-              >
-                Public verification →
-              </a>
-            </div>
-          </div>
-        )}
-      </div>
+          {a.licence_id && (
+            <Card>
+              <CardBody className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50 text-green-700">
+                    <FileSignature className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <div className="text-xs uppercase tracking-wider text-slate-500">Licence issued</div>
+                    <div className="font-mono text-base">{a.licence_id}</div>
+                  </div>
+                </div>
+                <a
+                  href={`${import.meta.env.VITE_PUBLIC_VERIFY_URL || "/verify"}/${a.licence_id}`}
+                  target="_blank" rel="noreferrer"
+                >
+                  <Button variant="outline" size="sm" iconRight={<ExternalLink className="h-4 w-4" />}>
+                    Public verification
+                  </Button>
+                </a>
+              </CardBody>
+            </Card>
+          )}
+        </div>
 
-      <div className="space-y-4">
-        <div className="card">
-          <div className="card-header">Audit trail</div>
-          <div className="card-body">
-            {audit.isLoading
-              ? <Spinner />
-              : <AuditTimeline events={audit.data?.results ?? []} />}
-          </div>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>Audit trail</CardHeader>
+            <CardBody>
+              {audit.isLoading ? <SkeletonText lines={4} /> :
+                <AuditTimeline events={audit.data?.results ?? []} />}
+            </CardBody>
+          </Card>
         </div>
       </div>
     </div>

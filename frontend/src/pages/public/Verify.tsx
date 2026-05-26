@@ -1,6 +1,9 @@
+import { Building2, CalendarCheck, CircleDot, FileSignature, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useParams } from "react-router-dom";
 
-import { Spinner } from "../../components/Spinner";
+import { Alert } from "../../components/ui/Alert";
+import { Card, CardBody, CardHeader } from "../../components/ui/Card";
+import { SkeletonText } from "../../components/ui/Skeleton";
 import { usePublicLicence } from "../../lib/queries";
 import { fmtDate } from "../../lib/utils";
 
@@ -9,71 +12,92 @@ export function PublicVerifyPage() {
   const licence = usePublicLicence(licenceNumber);
 
   return (
-    <div className="min-h-screen bg-slate-100 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 px-4 py-10">
       <div className="mx-auto max-w-xl">
-        <header className="mb-4 text-center">
-          <h1 className="text-2xl font-semibold">Licence verification</h1>
-          <p className="text-sm text-slate-600">
-            Radiation Protection Authority of Zambia · Public verification portal
-          </p>
-        </header>
-        <div className="card">
-          <div className="card-body">
-            {licence.isLoading && <Spinner />}
+        <div className="mb-6 flex items-center justify-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-500 text-yellow-300 shadow">
+            <CircleDot className="h-6 w-6" />
+          </span>
+          <div>
+            <div className="text-base font-semibold text-slate-900">Licence verification</div>
+            <div className="text-xs text-slate-500">Radiation Protection Authority of Zambia</div>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader eyebrow="Public verification">
+            Licence {licenceNumber}
+          </CardHeader>
+          <CardBody>
+            {licence.isLoading && <SkeletonText lines={5} />}
+
             {licence.isError && (
-              <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                No licence found for the number <span className="font-mono">{licenceNumber}</span>.
-                Please double-check the number printed on the certificate.
-              </div>
+              <Alert tone="error" title="Licence not found">
+                We could not find a licence matching <span className="font-mono">{licenceNumber}</span>.
+                Please check the number printed on the certificate.
+              </Alert>
             )}
+
             {licence.data && (
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between">
+              <div className="space-y-4">
+                <div className={
+                  "flex items-center gap-3 rounded-xl p-4 ring-1 " +
+                  (licence.data.status === "active"
+                    ? "bg-green-50 text-green-800 ring-green-200"
+                    : "bg-red-50 text-red-800 ring-red-200")
+                }>
+                  {licence.data.status === "active"
+                    ? <ShieldCheck className="h-6 w-6" />
+                    : <ShieldAlert className="h-6 w-6" />}
                   <div>
-                    <div className="text-xs uppercase text-slate-500">Licence number</div>
-                    <div className="font-mono text-base">{licence.data.licence_number}</div>
+                    <div className="text-sm font-semibold uppercase tracking-wider">
+                      {licence.data.status}
+                    </div>
+                    <div className="text-xs opacity-80">
+                      {licence.data.status === "active"
+                        ? "This licence is currently valid."
+                        : "This licence is not currently valid."}
+                    </div>
                   </div>
-                  <span
-                    className={
-                      "badge " +
-                      (licence.data.status === "active"
-                        ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
-                        : "bg-red-50 text-red-700 ring-1 ring-inset ring-red-200")
-                    }
-                  >
-                    {licence.data.status}
-                  </span>
                 </div>
-                <hr className="border-slate-200" />
-                <div>
-                  <div className="text-xs uppercase text-slate-500">Holder</div>
-                  <div>{licence.data.holder_name}</div>
-                </div>
-                <div>
-                  <div className="text-xs uppercase text-slate-500">Facility</div>
-                  <div>{licence.data.facility_name}</div>
+
+                <Row icon={<FileSignature className="h-4 w-4" />} label="Licence holder">
+                  {licence.data.holder_name}
+                </Row>
+                <Row icon={<Building2 className="h-4 w-4" />} label="Facility">
+                  {licence.data.facility_name}
                   <div className="text-xs text-slate-500">
                     {licence.data.facility_district}, {licence.data.facility_province}
                   </div>
-                </div>
+                </Row>
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs uppercase text-slate-500">Issued</div>
-                    <div>{fmtDate(licence.data.issued_at)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase text-slate-500">Expires</div>
-                    <div>{fmtDate(licence.data.expires_at)}</div>
-                  </div>
+                  <Row icon={<CalendarCheck className="h-4 w-4" />} label="Issued">
+                    {fmtDate(licence.data.issued_at)}
+                  </Row>
+                  <Row icon={<CalendarCheck className="h-4 w-4" />} label="Expires">
+                    {fmtDate(licence.data.expires_at)}
+                  </Row>
                 </div>
               </div>
             )}
-          </div>
-        </div>
+          </CardBody>
+        </Card>
+
         <p className="mt-4 text-center text-xs text-slate-500">
-          For questions about this licence, contact info@rpa.gov.zm.
+          For questions about this licence, contact <a className="underline" href="mailto:info@rpa.gov.zm">info@rpa.gov.zm</a>.
         </p>
       </div>
+    </div>
+  );
+}
+
+function Row({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-1.5 text-xs uppercase tracking-wider text-slate-500">
+        {icon}{label}
+      </div>
+      <div className="text-sm text-slate-900">{children}</div>
     </div>
   );
 }
